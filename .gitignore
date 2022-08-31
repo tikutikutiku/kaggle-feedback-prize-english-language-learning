@@ -1,3 +1,22 @@
+
+# kaggle data
+input/feedback-prize-2021/train/*.txt
+input/feedback-prize-2021/test/*.txt
+
+input/feedback-prize-effectiveness/train/*.txt
+input/feedback-prize-effectiveness/test/*.txt
+
+input/feedback-prize-english-language-learning/train/*.txt
+input/feedback-prize-english-language-learning/test/*.txt
+
+input/tascj/result/
+
+# created files
+*.csv
+*.joblib
+*.pth
+999_Stacking/*/catboost_info/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
