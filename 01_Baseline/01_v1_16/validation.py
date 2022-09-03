@@ -176,9 +176,9 @@ if __name__=='__main__':
     print('losses.shape = ', losses.shape)
     
     pred_df = pd.DataFrame()
-    pred_df['essay_id'] = essay_ids
+    pred_df['text_id'] = essay_ids
     for i,col in enumerate(TARGET_COLS):
-        pred_df[col] = labels[:,i]
+        pred_df[col] = preds[:,i]
     for i,col in enumerate(TARGET_COLS):
         pred_df[f'loss_{col}'] = losses[:,i]
     
