@@ -234,7 +234,7 @@ class Model(nn.Module):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         
-    def forward_logits(self, input_ids, attention_mask, aug=False, save_pred_seq=False):
+    def forward_logits(self, input_ids, attention_mask, aug=False, save_pred_seq=False, return_embed=False):
         assert self.multi_layers==1
         
         # sliding window approach to deal with longer tokens than max_length
@@ -271,7 +271,8 @@ class Model(nn.Module):
         mask = attention_mask.unsqueeze(-1)
         mask_sum = torch.sum(mask, dim=1)
         logits = torch.sum(hidden_states*mask, dim=1) / mask_sum # (bs, hidden_size*multi_layers)
-        
+        embed = logits.detach().cpu().numpy() 
+        embed = embed / np.linalg.norm(embed, axis=1, keepdims=True)
         
         if save_pred_seq:
             pred_seq = []
@@ -292,10 +293,16 @@ class Model(nn.Module):
         else:
             logits1 = self.head(logits) # (bs,num_labels)
             
-        if save_pred_seq:
-            return logits1, pred_seq
+        if return_embed:
+            if save_pred_seq:
+                return logits1, pred_seq, embed
+            else:
+                return logits1, embed
         else:
-            return logits1
+            if save_pred_seq:
+                return logits1, pred_seq
+            else:
+                return logits1
     
     
     def logits_fn(self, *wargs, **kwargs):
@@ -343,12 +350,13 @@ class Model(nn.Module):
             'input_ids':data['input_ids'],
             'attention_mask':data['attention_mask'],
             'aug':False,
+            'return_embed':True,
         }
         
         # get loss
         if self.loss in ['mse','l1','smoothl1']:
             input_data.update({'save_pred_seq':True})
-            logits, pred_seq = self.forward_logits(**input_data)
+            logits, pred_seq, embed = self.forward_logits(**input_data)
             loss = self.get_losses(
                 logits.reshape(-1,self.num_labels),
                 data['label'].reshape(-1,self.num_labels)
@@ -364,7 +372,8 @@ class Model(nn.Module):
             'pred':pred,
             'label':data['label'].detach().cpu().numpy(),
             'text':data['text'],
-            'essay_id':data['essay_id']
+            'essay_id':data['essay_id'],
+            'embed':embed,
         }
         if input_data['save_pred_seq']:
             output.update({'pred_seq':pred_seq})

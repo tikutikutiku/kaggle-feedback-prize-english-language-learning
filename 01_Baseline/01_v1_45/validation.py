@@ -158,22 +158,28 @@ if __name__=='__main__':
     labels = []
     losses = []
     pred_seqs = []
+    embeds = []
     for o in outputs:
         essay_ids.append(o['essay_id'])
         preds.append(o['pred'])
         labels.append(o['label'])
         losses.append(o['loss'])
         pred_seqs.extend(o['pred_seq'])
+        embeds.append(o['embed'])
 
     essay_ids = np.hstack(essay_ids)    
     preds = np.vstack(preds)
     labels = np.vstack(labels)
     losses = np.vstack(losses)
+    embeds = np.vstack(embeds)
     
     print('essay_ids.shape = ', essay_ids.shape)
     print('preds.shape = ', preds.shape)
     print('labels.shape = ', labels.shape)
     print('losses.shape = ', losses.shape)
+    print('embeds.shape = ', embeds.shape)
+    
+    np.savez_compressed(f'./result/{args.version}/embeds_fold{args.fold}.npz',embeds)
     
     pred_df = pd.DataFrame()
     pred_df['text_id'] = essay_ids
