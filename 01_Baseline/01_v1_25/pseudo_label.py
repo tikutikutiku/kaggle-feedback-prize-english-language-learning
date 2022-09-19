@@ -16,6 +16,8 @@ warnings.filterwarnings("ignore")
 import transformers
 transformers.logging.set_verbosity_error()
 
+from models import TARGET_COLS
+
 
 def seed_everything(seed: int):
     random.seed(seed)
@@ -34,7 +36,7 @@ def parse_args():
     parser.add_argument("--model", type=str, required=True)
     parser.add_argument("--version", type=str, required=True)
     parser.add_argument("--seed", type=int, default=-1, required=True)
-    parser.add_argument("--input_path", type=str, default='../../input/feedback-prize-effectiveness/', required=False)
+    parser.add_argument("--input_path", type=str, default='../../input/feedback-prize-2021/', required=False)
     
     parser.add_argument("--test_batch_size", type=int, default=1, required=False)
     parser.add_argument("--slack_url", type=str, default='none', required=False)
@@ -60,6 +62,7 @@ def parse_args():
     parser.add_argument("--edge_len", type=int, default=64, required=False)
     
     parser.add_argument("--unlabeled_data_path", type=str, required=False)
+    parser.add_argument("--weight_path", type=str, default='none', required=False)
     
     return parser.parse_args()
 
@@ -76,20 +79,20 @@ if __name__=='__main__':
         
     test_df = pd.read_csv(args.unlabeled_data_path)
     print('test_df.shape = ', test_df.shape)
+    test_df = test_df.rename(columns={'id':'essay_id'})
     
     os.environ['TOKENIZERS_PARALLELISM'] = 'false'
     
-    from preprocessing import relation_mapper
     if 'deberta-v2' in args.model or 'deberta-v3' in args.model:
         from transformers.models.deberta_v2 import DebertaV2TokenizerFast
         tokenizer = DebertaV2TokenizerFast.from_pretrained(args.model, trim_offsets=False)
-        special_tokens_dict = {'additional_special_tokens': ['\n\n'] + [f'[{s.upper()}]' for s in list(relation_mapper.keys())]}
+        special_tokens_dict = {'additional_special_tokens': ['\n\n'] }
         _ = tokenizer.add_special_tokens(special_tokens_dict)
     else:
         from transformers import AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained(args.model, trim_offsets=False)
-        special_tokens_dict = {'additional_special_tokens': [f'[{s.upper()}]' for s in list(relation_mapper.keys())]}
-        _ = tokenizer.add_special_tokens(special_tokens_dict)
+    
+    print('test_df.columns = ', test_df.columns)
     
     from torch.utils.data import DataLoader
     test_dataset = DatasetTest(
@@ -124,7 +127,10 @@ if __name__=='__main__':
                   edge_len=args.edge_len,
                   model_pretraining=model_pretraining,
                  )
-    weight_path = f'./result/{args.version}/model_seed{args.seed}_fold{args.fold}_swa.pth'
+    if args.weight_path!='none':
+        weight_path = args.weight_path
+    else:
+        weight_path = f'./result/{args.version}/model_seed{args.seed}_fold{args.fold}.pth'
     model.load_state_dict(torch.load(weight_path))
     model = model.cuda()
     model.eval()
@@ -135,19 +141,26 @@ if __name__=='__main__':
         with torch.no_grad():
             output = model.test_step(batch)
             outputs.append(output)
-            
+     
+    essay_ids = []
     preds = []
-    discourse_ids = []
+    #pred_seqs = []
     for o in outputs:
+        essay_ids.append(o['essay_id'])
         preds.append(o['pred'])
-        discourse_ids.extend(o['discourse_ids'])
+        #pred_seqs.extend(o['pred_seq'])
+
+    essay_ids = np.hstack(essay_ids)    
     preds = np.vstack(preds)
-    discourse_ids = np.hstack(discourse_ids)
+    print('essay_ids.shape = ', essay_ids.shape)
+    print('preds.shape = ', preds.shape)
     
     pred_df = pd.DataFrame()
-    pred_df['discourse_id'] = discourse_ids
-    pred_df['Ineffective'] = preds[:,0]
-    pred_df['Adequate'] = preds[:,1]
-    pred_df['Effective'] = preds[:,2]
-    pred_df = test_df.merge(pred_df, on='discourse_id', how='left')
+    pred_df['text_id'] = essay_ids
+    for i,col in enumerate(TARGET_COLS):
+        pred_df[col] = preds[:,i]
+    
+    #pred_df['pred_seq'] = pred_seqs
+    
+    pred_df = test_df.merge(pred_df, left_on='essay_id', right_on='text_id', how='left')
     pred_df.to_csv(f'./result/{args.version}/pseudo_fold{args.fold}.csv', index=False)
