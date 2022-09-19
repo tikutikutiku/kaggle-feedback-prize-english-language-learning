@@ -234,7 +234,7 @@ class Model(nn.Module):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         
-    def forward_logits(self, input_ids, attention_mask, aug=False, save_pred_seq=False):
+    def forward_logits(self, input_ids, attention_mask, aug=False, save_pred_seq=False, return_embed=False):
         assert self.multi_layers==1
         
         # sliding window approach to deal with longer tokens than max_length
@@ -271,7 +271,8 @@ class Model(nn.Module):
         mask = attention_mask.unsqueeze(-1)
         mask_sum = torch.sum(mask, dim=1)
         logits = torch.sum(hidden_states*mask, dim=1) / mask_sum # (bs, hidden_size*multi_layers)
-        
+        embed = logits.detach().cpu().numpy() 
+        embed = embed / np.linalg.norm(embed, axis=1, keepdims=True)
         
         if save_pred_seq:
             pred_seq = []
@@ -292,10 +293,16 @@ class Model(nn.Module):
         else:
             logits1 = self.head(logits) # (bs,num_labels)
             
-        if save_pred_seq:
-            return logits1, pred_seq
+        if return_embed:
+            if save_pred_seq:
+                return logits1, pred_seq, embed
+            else:
+                return logits1, embed
         else:
-            return logits1
+            if save_pred_seq:
+                return logits1, pred_seq
+            else:
+                return logits1
     
     
     def logits_fn(self, *wargs, **kwargs):
@@ -343,12 +350,13 @@ class Model(nn.Module):
             'input_ids':data['input_ids'],
             'attention_mask':data['attention_mask'],
             'aug':False,
+            'return_embed':True,
         }
         
         # get loss
         if self.loss in ['mse','l1','smoothl1']:
             input_data.update({'save_pred_seq':True})
-            logits, pred_seq = self.forward_logits(**input_data)
+            logits, pred_seq, embed = self.forward_logits(**input_data)
             loss = self.get_losses(
                 logits.reshape(-1,self.num_labels),
                 data['label'].reshape(-1,self.num_labels)
@@ -364,7 +372,8 @@ class Model(nn.Module):
             'pred':pred,
             'label':data['label'].detach().cpu().numpy(),
             'text':data['text'],
-            'essay_id':data['essay_id']
+            'essay_id':data['essay_id'],
+            'embed':embed,
         }
         if input_data['save_pred_seq']:
             output.update({'pred_seq':pred_seq})
@@ -395,7 +404,7 @@ class Model(nn.Module):
             'aug':False,
         }
         logits = self.forward_logits(**input_data)
-        pred = logits.softmax(dim=-1).detach().cpu().numpy().reshape(-1,self.num_labels)
+        pred = logits.detach().cpu().numpy().reshape(-1,self.num_labels)
         return {
             'pred':pred,
             'text':data['text'],
@@ -503,8 +512,7 @@ import numpy as np
 from torch.utils.data import Dataset
 
 class DatasetTrain(Dataset):
-    def __init__(self, df, tokenizer, mask_prob=0, mask_ratio=0, max_length=-1, crop_prob=0, 
-                 aug='false', mode='train'):
+    def __init__(self, df, tokenizer, mask_prob=0, mask_ratio=0, max_length=-1, aug='false', mode='train'):
         self.df = df
         self.unique_ids = sorted(df['essay_id'].unique())
         self.tokenizer = tokenizer
@@ -514,7 +522,6 @@ class DatasetTrain(Dataset):
         self.mode = mode
         self.target_cols = TARGET_COLS
         self.max_length = max_length
-        self.crop_prob = crop_prob
         
     def __len__(self):
         return len(self.unique_ids)
@@ -525,20 +532,11 @@ class DatasetTrain(Dataset):
         
         text = sample_df['full_text'].values[0]
         labels = sample_df[self.target_cols].values[0]
-        
+
         if self.max_length==-1:
             tokens = self.tokenizer.encode_plus(text, add_special_tokens=True)
         else:
-            if np.random.random() < self.crop_prob:
-                pre_tokens = self.tokenizer.encode_plus(text, add_special_tokens=True)
-                tokens = {}
-                start_token = np.random.randint(1, max(2, len(pre_tokens['input_ids'])-self.max_length ) )
-                max_len = min(self.max_length, len(pre_tokens['input_ids']))
-                for k,v in pre_tokens.items():
-                    tokens[k] = [v[0]] + v[start_token:start_token+max_len-2] + [v[-1]]
-            else:
-                tokens = self.tokenizer.encode_plus(text, add_special_tokens=True, 
-                                                    max_length=self.max_length, truncation=True)
+            tokens = self.tokenizer.encode_plus(text, add_special_tokens=True, max_length=self.max_length, truncation=True)
         input_ids = torch.LongTensor(tokens['input_ids'])
         attention_mask = torch.ones(len(input_ids)).long()
         
