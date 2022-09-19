@@ -1,5 +1,6 @@
 
 # kaggle data
+*.npz
 input/feedback-prize-2021/train/*.txt
 input/feedback-prize-2021/test/*.txt
 
