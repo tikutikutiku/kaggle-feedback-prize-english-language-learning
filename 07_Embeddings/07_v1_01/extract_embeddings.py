@@ -4,10 +4,7 @@ import torch
 import numpy as np
 from torch.utils.data import Dataset
 
-MAX_LENGTH = 512 
-BS = 8
-NUM_WORKERS = 4
-    
+
 class DatasetFB3(Dataset):
     def __init__(self, df, tokenizer, max_length=-1):
         self.df = df
@@ -38,7 +35,7 @@ class DatasetFB3(Dataset):
         )
     
 
-def get_embeddings(model_name, train_df):
+def get_embeddings(model_name, train_df, args):
     if 'deberta-v2' in model_name or 'deberta-v3' in model_name:
         from transformers.models.deberta_v2 import DebertaV2TokenizerFast
         tokenizer = DebertaV2TokenizerFast.from_pretrained(model_name, trim_offsets=False)
@@ -51,15 +48,15 @@ def get_embeddings(model_name, train_df):
     dataset_fb3 = DatasetFB3(
             train_df,
             tokenizer,
-            max_length=MAX_LENGTH,
+            max_length=args.max_length,
         )
     from torch.utils.data import DataLoader
     dataloader_fb3 = DataLoader(
                 dataset_fb3,
-                batch_size=BS,
+                batch_size=args.bs,
                 shuffle=False,
                 collate_fn=CustomCollator(tokenizer),
-                num_workers=NUM_WORKERS,
+                num_workers=4,
                 pin_memory=True,
                 drop_last=False,
             )
@@ -107,7 +104,10 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", type=str, required=True)
     parser.add_argument("--model_name", type=str, required=True)
-    parser.add_argument("--input_path", type=str, default='../../input/feedback-prize-english-language-learning/', required=False)
+    parser.add_argument("--input_path", type=str, default='../../input/feedback-prize-english-language-learning/train.csv', required=False)
+    parser.add_argument("--max_length", type=int, default=512, required=False)
+    parser.add_argument("--bs", type=int, default=8, required=False)
+    parser.add_argument("--mode", type=str, default='fb3', required=False)
     return parser.parse_args()
     
     
@@ -117,12 +117,21 @@ if __name__=='__main__':
     
     import pandas as pd
     from os.path import join as opj
-    train_df = pd.read_csv(opj(args.input_path,'train.csv'))
+    train_df = pd.read_csv(args.input_path)
     
-    embed = get_embeddings(args.model_name, train_df)
+    if 'text_id' not in train_df.columns:
+        try:
+            train_df['text_id'] = train_df['essay_id'].values
+        except:
+            train_df['text_id'] = train_df['id'].values
+    
+    embed = get_embeddings(args.model_name, train_df, args)
     print('embed.shape = ', embed.shape)
     import os
     os.makedirs(f'./result', exist_ok=True)
     os.makedirs(f'./result/{args.version}', exist_ok=True)
     model_name = args.model_name.split('/')[-1]
-    np.savez_compressed(f'./result/{args.version}/embed_{model_name}.npz', embed)
+    if args.mode=='fb3':
+        np.savez_compressed(f'./result/{args.version}/embed_{model_name}.npz', embed)
+    else:
+        np.savez_compressed(f'./result/{args.version}/embed_{model_name}_{args.mode}.npz', embed)
