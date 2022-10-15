@@ -131,7 +131,7 @@ if __name__=='__main__':
                   loss=args.loss,
                   head=args.head,
                   pooling=args.pooling,
-                  num_pooling_layers=args.num_poling_layers,
+                  num_pooling_layers=args.num_pooling_layers,
                   multi_layers=args.multi_layers,
                   l2norm=args.l2norm,
                   max_length=args.max_length,
