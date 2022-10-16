@@ -68,7 +68,7 @@ def parse_args():
     
     parser.add_argument("--num_labels", type=int, default=6, required=False)
     parser.add_argument("--num_labels_2", type=int, default=7, required=False)
-    #parser.add_argument("--num_classes", type=int, default=7, required=False)
+    parser.add_argument("--num_classes", type=int, default=7, required=False)
     
     parser.add_argument("--mixup_alpha", type=float, default=1.0, required=False)
     parser.add_argument("--aug_stop_epoch", type=int, default=999, required=False)

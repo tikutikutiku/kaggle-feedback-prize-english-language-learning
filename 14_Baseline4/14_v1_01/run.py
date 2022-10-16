@@ -236,8 +236,8 @@ def run(args, trn_df, val_df, pseudo_df=None):
                         if val_score < val_score_best:
                             val_score_best = val_score #update
                             torch.save(model.state_dict(), 
-                                       opj(output_path,f'model_seed{args.seed}_fold{args.fold}.pth')) #save
-                            print('model (best score) saved')
+                                       opj(output_path,f'model_{args.class_name}_seed{args.seed}_fold{args.fold}.pth')) #save
+                            print(f'model_{args.class_name} (best score) saved')
                 
             trn_loss = trn_loss / counter
             trn_score = model.get_scores(np.vstack(trn_preds), np.vstack(trn_trues))
@@ -282,8 +282,8 @@ def run(args, trn_df, val_df, pseudo_df=None):
                 if val_score < val_score_best:
                     val_score_best = val_score #update
                     torch.save(model.state_dict(), opj(
-                        output_path,f'model_seed{args.seed}_fold{args.fold}.pth')) #save
-                    print('model (best score) saved')
+                        output_path,f'model_{args.class_name}_seed{args.seed}_fold{args.fold}.pth')) #save
+                    print(f'model_{args.class_name} (best score) saved')
                 
         del model
         torch.cuda.empty_cache()
