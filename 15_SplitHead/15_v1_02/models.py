@@ -32,7 +32,7 @@ from transformers import (AutoConfig, AutoModel, AutoTokenizer, AdamW,
                           get_linear_schedule_with_warmup)
 import bitsandbytes as bnb
 from metrics import calc_metric
-#TARGET_COLS = ['cohesion','syntax','vocabulary','phraseology','grammar','conventions']
+TARGET_COLS = ['cohesion','syntax','vocabulary','phraseology','grammar','conventions']
 
 class ResidualLSTM(nn.Module):
     '''Based on Shujun's code'''
@@ -243,26 +243,36 @@ class Model(nn.Module):
             raise Exception()
             
         if head=='simple':
-            self.head = nn.Sequential(
-                #nn.Dropout(p_drop),
-                nn.LayerNorm(self.config.hidden_size*self.multi_layers),
-                nn.Linear(self.config.hidden_size*self.multi_layers, self.num_labels)
-            )
-        elif head=='attention':
-            n_hidden = self.config.hidden_size*self.multi_layers
-            self.head = nn.Sequential(
-                nn.LayerNorm(n_hidden),
-                AttentionBlock(n_hidden,n_hidden,1),
-                nn.Linear(n_hidden, self.num_labels)
-            )
-        elif head=='custom1':
-            self.head = nn.Sequential(
-                nn.LayerNorm(self.config.hidden_size*self.multi_layers),
-                nn.Linear(self.config.hidden_size*self.multi_layers, 512),
-                nn.GELU(),
-                nn.LayerNorm(512),
-                nn.Linear(512, self.num_labels),
-            )
+#             self.head = nn.Sequential(
+#                 #nn.Dropout(p_drop),
+#                 nn.LayerNorm(self.config.hidden_size*self.multi_layers),
+#                 nn.Linear(self.config.hidden_size*self.multi_layers, self.num_labels)
+#             )
+            self.head = nn.ModuleList([
+                nn.Sequential(
+                    nn.LayerNorm(self.config.hidden_size*self.multi_layers),
+                    nn.Linear(self.config.hidden_size*self.multi_layers, 1)
+                )
+                for i in range(len(TARGET_COLS))
+            ])
+#         elif head=='attention':
+#             n_hidden = self.config.hidden_size*self.multi_layers
+#             self.head = nn.Sequential(
+#                 nn.LayerNorm(n_hidden),
+#                 AttentionBlock(n_hidden,n_hidden,1),
+#                 nn.Linear(n_hidden, self.num_labels)
+#             )
+        elif head=='mlp':
+            self.head = nn.ModuleList([
+                nn.Sequential(
+                    nn.LayerNorm(self.config.hidden_size*self.multi_layers),
+                    nn.Linear(self.config.hidden_size*self.multi_layers, 512),
+                    nn.GELU(),
+                    nn.LayerNorm(512),
+                    nn.Linear(512, 1),
+                )
+                for i in range(len(TARGET_COLS))
+            ])
         else:
             raise Exception()
         self._init_weights(self.head)
@@ -360,15 +370,21 @@ class Model(nn.Module):
             logits = lam * logits + (1 - lam) * logits[index, :]
         
         if self.msd=='true' and self.training:
-            logits1_1 = self.head(self.dropout_1(logits))
-            logits1_2 = self.head(self.dropout_2(logits))
-            logits1_3 = self.head(self.dropout_3(logits))
-            logits1_4 = self.head(self.dropout_4(logits))
-            logits1_5 = self.head(self.dropout_5(logits))
+#             logits1_1 = self.head(self.dropout_1(logits))
+#             logits1_2 = self.head(self.dropout_2(logits))
+#             logits1_3 = self.head(self.dropout_3(logits))
+#             logits1_4 = self.head(self.dropout_4(logits))
+#             logits1_5 = self.head(self.dropout_5(logits))
+            logits1_1 = torch.cat([head(self.dropout_1(logits)) for head in self.head], dim=1)
+            logits1_2 = torch.cat([head(self.dropout_2(logits)) for head in self.head], dim=1)
+            logits1_3 = torch.cat([head(self.dropout_3(logits)) for head in self.head], dim=1)
+            logits1_4 = torch.cat([head(self.dropout_4(logits)) for head in self.head], dim=1)
+            logits1_5 = torch.cat([head(self.dropout_5(logits)) for head in self.head], dim=1)
             logits1 = (logits1_1 + logits1_2 + logits1_3 + logits1_4 + logits1_5) / 5.0
         else:
-            logits1 = self.head(logits) # (bs,num_labels)
-            
+            #logits1 = self.head(logits) # (bs,num_labels)
+            logits1 = torch.cat([head(logits) for head in self.head], dim=1)
+    
         if return_embed:
             if save_pred_seq:
                 return logits1, pred_seq, embed
@@ -590,7 +606,7 @@ from torch.utils.data import Dataset
 
 class DatasetTrain(Dataset):
     def __init__(self, df, tokenizer, mask_prob=0, mask_ratio=0, max_length=-1, crop_prob=0, 
-                 aug='false', mode='train', target_cols=[]):
+                 aug='false', mode='train'):
         self.df = df
         self.unique_ids = sorted(df['essay_id'].unique())
         self.tokenizer = tokenizer
@@ -598,7 +614,7 @@ class DatasetTrain(Dataset):
         self.mask_ratio = mask_ratio
         self.aug = aug
         self.mode = mode
-        self.target_cols = target_cols
+        self.target_cols = TARGET_COLS
         self.max_length = max_length
         self.crop_prob = crop_prob
         
@@ -647,12 +663,11 @@ class DatasetTrain(Dataset):
     
     
 class DatasetTest(Dataset):
-    def __init__(self, df, tokenizer, max_length=-1, target_cols=[]):
+    def __init__(self, df, tokenizer, max_length=-1):
         self.df = df
         self.unique_ids = sorted(df['essay_id'].unique())
         self.tokenizer = tokenizer
         self.max_length = max_length
-        self.target_cols = target_cols
         
     def __len__(self):
         return len(self.unique_ids)
@@ -679,6 +694,7 @@ class DatasetTest(Dataset):
 class CustomCollator(object):
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
+        self.target_cols = TARGET_COLS
         
     def __call__(self, samples):
         output = dict()
