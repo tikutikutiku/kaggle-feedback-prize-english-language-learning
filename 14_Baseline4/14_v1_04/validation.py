@@ -16,7 +16,7 @@ warnings.filterwarnings("ignore")
 import transformers
 transformers.logging.set_verbosity_error()
 
-from models import TARGET_COLS
+#from models import TARGET_COLS
 
 def seed_everything(seed: int):
     random.seed(seed)
@@ -62,6 +62,8 @@ def parse_args():
     parser.add_argument("--window_size", type=int, default=512, required=False)
     parser.add_argument("--inner_len", type=int, default=384, required=False)
     parser.add_argument("--edge_len", type=int, default=64, required=False)
+    
+    parser.add_argument("--class_name", type=str, default="none", required=False)
     
     return parser.parse_args()
 
@@ -110,6 +112,7 @@ if __name__=='__main__':
         val_df, 
         tokenizer,
         max_length=args.max_length,
+        target_cols=[args.class_name],
     )
     from torch.utils.data import DataLoader
     val_dataloader = DataLoader(
@@ -143,7 +146,7 @@ if __name__=='__main__':
     if args.weight_path!='none':
         weight_path = args.weight_path
     else:
-        weight_path = f'./result/{args.version}/model_seed{args.seed}_fold{args.fold}.pth'
+        weight_path = f'./result/{args.version}/model_{args.class_name}_seed{args.seed}_fold{args.fold}.pth'
     model.load_state_dict(torch.load(weight_path))
     model = model.cuda()
     model.eval()
@@ -183,15 +186,17 @@ if __name__=='__main__':
     print('losses.shape = ', losses.shape)
     print('embeds.shape = ', embeds.shape)
     
-    np.savez_compressed(f'./result/{args.version}/embeds_fold{args.fold}.npz',embeds)
+    np.savez_compressed(f'./result/{args.version}/embeds_{args.class_name}_fold{args.fold}.npz',embeds)
     
     pred_df = pd.DataFrame()
     pred_df['text_id'] = essay_ids
-    for i,col in enumerate(TARGET_COLS):
-        pred_df[col] = preds[:,i]
-    for i,col in enumerate(TARGET_COLS):
-        pred_df[f'loss_{col}'] = losses[:,i]
+#     for i,col in enumerate(TARGET_COLS):
+#         pred_df[col] = preds[:,i]
+#     for i,col in enumerate(TARGET_COLS):
+#         pred_df[f'loss_{col}'] = losses[:,i]
+    pred_df[args.class_name] = preds
+    pred_df[f'loss_{args.class_name}'] = losses
     
     #pred_df['pred_seq'] = pred_seqs
     
-    pred_df.to_csv(f'./result/{args.version}/pred_fold{args.fold}.csv', index=False)
+    pred_df.to_csv(f'./result/{args.version}/pred_{args.class_name}_fold{args.fold}.csv', index=False)

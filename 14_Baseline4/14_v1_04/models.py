@@ -647,11 +647,12 @@ class DatasetTrain(Dataset):
     
     
 class DatasetTest(Dataset):
-    def __init__(self, df, tokenizer, max_length=-1):
+    def __init__(self, df, tokenizer, max_length=-1, target_cols=[]):
         self.df = df
         self.unique_ids = sorted(df['essay_id'].unique())
         self.tokenizer = tokenizer
         self.max_length = max_length
+        self.target_cols = target_cols
         
     def __len__(self):
         return len(self.unique_ids)
