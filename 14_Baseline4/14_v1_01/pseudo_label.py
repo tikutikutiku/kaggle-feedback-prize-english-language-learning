@@ -100,6 +100,7 @@ if __name__=='__main__':
     test_dataset = DatasetTest(
         test_df,
         tokenizer, 
+        max_length=args.max_length,
     )
     test_dataloader = DataLoader(
             test_dataset,

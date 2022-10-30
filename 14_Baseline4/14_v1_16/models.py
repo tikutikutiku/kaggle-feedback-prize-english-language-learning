@@ -480,7 +480,7 @@ class Model(nn.Module):
             'aug':False,
         }
         logits = self.forward_logits(**input_data)
-        pred = logits.softmax(dim=-1).detach().cpu().numpy().reshape(-1,self.num_labels)
+        pred = logits.detach().cpu().numpy().reshape(-1,self.num_labels)
         return {
             'pred':pred,
             'text':data['text'],
