@@ -206,15 +206,15 @@ class Model(nn.Module):
             
         # freeze some layers for large models
         if freeze_layers == 'true':
-            if 'deberta-v2-xxlarge' in model_name:
+            if 'xxlarge' in model_name:
                 print('freeze 24/48')
                 self.transformer.embeddings.requires_grad_(False)
                 self.transformer.encoder.layer[:24].requires_grad_(False) # freeze 24/48
-            elif 'deberta-v2-xlarge' in model_name:
+            elif 'xlarge' in model_name:
                 print('freeze 12/24')
                 self.transformer.embeddings.requires_grad_(False)
                 self.transformer.encoder.layer[:12].requires_grad_(False) # freeze 12/24
-            elif 'deberta-xlarge' in model_name:
+            elif 'large' in model_name:
                 print('freeze 12/24')
                 self.transformer.embeddings.requires_grad_(False)
                 self.transformer.encoder.layer[:12].requires_grad_(False) # freeze 12/24
@@ -480,7 +480,7 @@ class Model(nn.Module):
             'aug':False,
         }
         logits = self.forward_logits(**input_data)
-        pred = logits.softmax(dim=-1).detach().cpu().numpy().reshape(-1,self.num_labels)
+        pred = logits.detach().cpu().numpy().reshape(-1,self.num_labels)
         return {
             'pred':pred,
             'text':data['text'],
