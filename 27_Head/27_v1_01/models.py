@@ -275,8 +275,6 @@ class Model(nn.Module):
                     TransformerMeanPooling(self.config.hidden_size*self.multi_layers + num_feats)
                     for _ in range(num_labels)
                 ])
-                for i in range(num_labels):
-                    self._init_weights(self.pooling_fn[i])
             else:
                 raise Exception()
         else:
@@ -563,7 +561,7 @@ class Model(nn.Module):
         head_params = list(self.head.named_parameters())
         if self.rnn!='none':
             head_params += list(self.rnn_head.named_parameters())
-        if self.pooling in ['weighted_layer','attention']:
+        if self.pooling in ['weighted_layer','attention','transformer+mean']:
             head_params += list(self.pooling_fn.named_parameters())
         param_optimizer = list(self.transformer.named_parameters())
         no_decay = ["bias", "LayerNorm.bias"]
